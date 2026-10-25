@@ -1,0 +1,657 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Calendario Lavoro Sync</title>
+
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#4f46e5">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" sizes="192x192" href="logo.png">
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+
+<style>
+/* Reset & Variabili per una gestione pulita dei colori */
+:root {
+    --bg-primary: #f8fafc;
+    --card-bg: #ffffff;
+    --text-main: #1e293b;
+    --text-muted: #64748b;
+    --accent: #4f46e5; /* Elegante viola/blu indigo */
+    --accent-hover: #4338ca;
+    --border-color: #e2e8f0;
+    --radius-sm: 8px;
+    --radius-md: 12px;
+    --radius-lg: 16px;
+    --shadow-sm: 0 1px 3px rgba(0,0,0,0.05);
+    --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.05), 0 2px 4px -1px rgba(0,0,0,0.03);
+    --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.05), 0 4px 6px -4px rgba(0,0,0,0.05);
+}
+
+html { height: 100%; }
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-main);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 16px 12px; 
+    margin: 0;
+    -webkit-font-smoothing: antialiased;
+    box-sizing: border-box;
+}
+
+.calendar-wrap {
+    width: 100%;
+    max-width: 850px;
+}
+
+/* Status bar nascosta */
+#syncStatus { 
+    display: none;
+}
+
+/* Controlli di Navigazione */
+.controls {
+    margin-bottom: 20px; 
+    display: flex; 
+    gap: 8px; 
+    align-items: center; 
+    flex-wrap: wrap; 
+    justify-content: center;
+    width: 100%;
+    max-width: 850px;
+}
+
+select {
+    padding: 10px 16px;
+    font-size: 15px;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border-color);
+    background-color: var(--card-bg);
+    color: var(--text-main);
+    font-weight: 500;
+    outline: none;
+    cursor: pointer;
+    box-shadow: var(--shadow-sm);
+    transition: all 0.2s ease;
+}
+select:focus {
+    border-color: var(--accent);
+}
+
+/* Pulsanti */
+button {
+    font-family: inherit;
+    padding: 10px 16px;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 14px;
+    transition: all 0.2s ease;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-sm);
+}
+button:active {
+    transform: scale(0.97);
+}
+
+.btn-ui { color: white; }
+.btn-annual { background: var(--accent); }
+.btn-annual:hover { background: var(--accent-hover); }
+.btn-monthly { background: #7c3aed; } /* Viola moderno */
+.btn-monthly:hover { background: #6d28d9; }
+
+/* Calendario */
+table {
+    border-collapse: separate; 
+    border-spacing: 6px; /* Rende i giorni dei box separati e moderni */
+    width: 100%; 
+    max-width: 850px; 
+    background: transparent; 
+    table-layout: fixed; 
+    touch-action: pan-y;
+}
+
+th {
+    background: transparent;
+    color: var(--text-muted); 
+    height: 35px; 
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+td {
+    border: 1px solid var(--border-color); 
+    background: var(--card-bg);
+    border-radius: var(--radius-md);
+    min-height: 85px; 
+    vertical-align: top; 
+    padding: 8px; 
+    cursor: pointer; 
+    transition: all 0.2s ease; 
+    overflow: hidden;
+    position: relative;
+    box-shadow: var(--shadow-sm);
+    -webkit-user-select: none; user-select: none;
+    -webkit-tap-highlight-color: transparent;
+}
+td:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+/* Numeri del giorno all'interno delle celle */
+td > div:first-child {
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--text-main);
+}
+
+.other-month {
+    opacity: 0.4;
+    background: #f1f5f9;
+}
+
+/* Etichetta della Società nel Calendario */
+.company-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #1e293b !important;
+    margin-top: 6px; 
+    line-height: 1.2;
+    padding: 4px 6px;
+    border-radius: 6px;
+    background: rgba(255,255,255,0.85);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.05);
+    word-break: break-all;
+}
+
+/* Etichetta "Occupato" nel Calendario */
+.busy-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: #7f1d1d;
+    margin-top: 4px;
+    line-height: 1.2;
+    padding: 3px 5px;
+    border-radius: 6px;
+    background: rgba(254, 226, 226, 0.92);
+    word-break: break-word;
+    overflow-wrap: anywhere;
+}
+
+.paid-day { 
+    opacity: 0.6; 
+}
+.paid-day::after {
+    content: "✓ Pagato";
+    display: block;
+    font-size: 9px;
+    font-weight: bold;
+    color: #16a34a;
+    margin-top: 2px;
+}
+
+/* Animazioni e Feedback Gestures */
+@keyframes slideFromRight { from { transform: translateX(20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes slideFromLeft { from { transform: translateX(-20px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+#calendarBody.swipe-left { animation: slideFromRight 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+#calendarBody.swipe-right { animation: slideFromLeft 0.25s cubic-bezier(0.16, 1, 0.3, 1); }
+
+td.td-pressing { background-color: rgba(79, 70, 229, 0.15) !important; }
+td.flash-copied { outline: 3px solid #f59e0b; outline-offset: -3px; }
+td.flash-pasted { outline: 3px solid #10b981; outline-offset: -3px; }
+@keyframes cellShake { 0%,100%{transform:translateX(0);} 25%{transform:translateX(-4px);} 75%{transform:translateX(4px);} }
+td.flash-empty { animation: cellShake 0.3s; }
+
+/* Modali Eleganti */
+.modal-overlay {
+    display:none;
+    position:fixed;
+    inset:0;
+    background:rgba(15, 23, 42, 0.4); /* Overlay scuro e sfocato */
+    backdrop-filter: blur(4px);
+    justify-content:center;
+    align-items:center;
+    z-index: 1000;
+}
+
+.modal {
+    background: var(--card-bg);
+    padding: 24px;
+    border-radius: var(--radius-lg);
+    width: 90%;
+    max-width: 420px;
+    max-height: 85vh;
+    overflow-y: auto;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+}
+
+.modal h3 {
+    font-weight: 800;
+    font-size: 20px;
+    color: var(--text-main);
+}
+
+/* Form e Input */
+.input-group { margin: 16px 0; }
+.input-group label {
+    font-weight: 600;
+    display: block;
+    margin-bottom: 6px; 
+    font-size: 13px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+.input-group select, .input-group input {
+    width: 100%; 
+    padding: 10px 12px; 
+    box-sizing: border-box; 
+    border: 1px solid var(--border-color); 
+    border-radius: var(--radius-md);
+    background: var(--bg-primary);
+    color: var(--text-main);
+    font-size: 15px;
+    outline: none;
+    transition: all 0.2s ease;
+}
+.input-group select:focus, .input-group input:focus {
+    border-color: var(--accent);
+    background: var(--card-bg);
+}
+
+/* Checkbox "Occupato" */
+.input-group .busy-toggle {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 8px;
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--text-main);
+    text-transform: none;
+    letter-spacing: 0;
+    cursor: pointer;
+}
+.input-group .busy-toggle input[type="checkbox"] {
+    width: 22px;
+    height: 22px;
+    padding: 0;
+    margin: 0;
+    flex-shrink: 0;
+    accent-color: var(--accent);
+    cursor: pointer;
+}
+
+/* Bottoni di azione all'interno dei modali */
+.modal-buttons { display: flex; justify-content: space-between; margin-top: 24px; gap: 8px; }
+.btn-save { background: #10b981; color: white; }
+.btn-save:hover { background: #059669; }
+.btn-cancel { background: #64748b; color: white; }
+.btn-cancel:hover { background: #475569; }
+.btn-delete { background: #ef4444; color: white; }
+.btn-delete:hover { background: #dc2626; }
+.btn-copy { background: #f59e0b; color: white; }
+.btn-paste { background: #3b82f6; color: white; }
+
+/* Statistiche all'interno dei dettagli giorno */
+.stats-container {
+    margin-top: 20px; 
+    padding: 16px; 
+    background: #eff6ff; 
+    border-radius: var(--radius-md); 
+    font-size: 14px; 
+    border-left: 4px solid var(--accent);
+}
+.stat-row { 
+    display: flex; 
+    justify-content: space-between; 
+    margin-bottom: 6px; 
+    font-weight: 500;
+}
+.stat-row span:last-child {
+    font-weight: 700;
+    color: var(--accent);
+}
+
+/* Consuntivi e Liste */
+.summary-title { 
+    border-bottom: 2px solid var(--border-color); 
+    margin-bottom: 20px; 
+    padding-bottom: 10px; 
+}
+.summary-item { 
+    padding: 14px; 
+    background: var(--bg-primary); 
+    border-left: 4px solid var(--accent); 
+    border-radius: var(--radius-md); 
+    display: flex; 
+    justify-content: space-between; 
+    margin-bottom: 10px; 
+    align-items: center;
+    box-shadow: var(--shadow-sm);
+}
+.highlight-net { 
+    border-left-color: #10b981; 
+    background: #ecfdf5; 
+    color: #065f46;
+}
+.highlight-net span:last-child {
+    font-size: 18px;
+    font-weight: 800;
+}
+
+.btn-excel { 
+    background: #10b981; 
+    color: white; 
+    padding: 8px 12px; 
+    border-radius: var(--radius-sm); 
+    font-size: 12px; 
+}
+
+.invoice-box { 
+    width: 100%; 
+    display: flex; 
+    align-items: center; 
+    gap: 8px; 
+    margin-top: 10px; 
+    border-top: 1px dashed var(--border-color); 
+    padding-top: 10px;
+}
+
+.btn-add { 
+    background: var(--accent); 
+    color: white; 
+    width: 42px; 
+    height: 42px;
+    flex-shrink: 0; 
+    border-radius: var(--radius-md); 
+    font-size: 20px; 
+    padding: 0;
+}
+.btn-add:hover { background: var(--accent-hover); }
+
+.new-row { display: flex; gap: 8px; margin-top: 8px; }
+
+/* OTTIMIZZAZIONE MOBILE / TABLET */
+html, body { max-width: 100%; overflow-x: hidden; }
+body { overscroll-behavior-y: contain; }
+button, select, .btn-add { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+@supports (padding: max(0px)) {
+    body {
+        padding-left: max(12px, env(safe-area-inset-left));
+        padding-right: max(12px, env(safe-area-inset-right));
+        padding-top: max(16px, env(safe-area-inset-top));
+        padding-bottom: max(16px, env(safe-area-inset-bottom));
+    }
+}
+
+.workdays-wrap {
+    width: 100%;
+    max-width: 850px;
+    margin-top: 14px;
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    overflow: hidden;
+}
+
+.workdays-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 14px;
+    border-bottom: 1px solid var(--border-color);
+    font-weight: 700;
+    font-size: 14px;
+}
+
+.workdays-count {
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.workdays-list {
+    max-height: 46vh;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior: contain;
+    scroll-snap-type: y proximity;
+}
+
+.workday-row {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    min-height: 62px;
+    padding: 9px 13px;
+    border-bottom: 1px solid var(--border-color);
+    box-sizing: border-box;
+    cursor: pointer;
+    scroll-snap-align: start;
+    transition: background-color .15s ease;
+}
+
+.workday-row:last-child { border-bottom: none; }
+.workday-row:active { background: #f1f5f9; }
+
+.workday-date {
+    flex: 0 0 42px;
+    text-align: center;
+    font-weight: 800;
+    font-size: 21px;
+    line-height: 1;
+}
+
+.workday-info {
+    min-width: 0;
+    flex: 1;
+}
+
+.workday-company {
+    font-weight: 700;
+    font-size: 14px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workday-location {
+    margin-top: 3px;
+    color: var(--text-muted);
+    font-size: 11px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.workday-time {
+    flex: 0 0 auto;
+    color: var(--text-muted);
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.workday-arrow {
+    color: var(--text-muted);
+    font-size: 18px;
+}
+
+.workdays-empty {
+    padding: 22px 14px;
+    text-align: center;
+    color: var(--text-muted);
+    font-size: 13px;
+}
+
+@media (max-width: 600px) {
+    body { padding: 8px 5px; }
+
+    .controls { gap: 6px; margin-bottom: 8px; }
+    select { padding: 7px 8px; font-size: 13px; }
+    button { padding: 7px 8px; font-size: 12px; }
+
+    table { border-spacing: 4px; }
+    th { height: 22px; font-size: 11px; }
+    td { min-height: 62px; padding: 5px; border-radius: var(--radius-sm); }
+    td > div:first-child { font-size: 14px; }
+
+    .company-label {
+        font-size: 10px;
+        margin-top: 4px;
+        padding: 2px 4px;
+        white-space: normal;
+        overflow-wrap: break-word;
+        word-break: normal;
+        line-height: 1.25;
+    }
+    .busy-label { font-size: 9px; padding: 2px 4px; }
+    .paid-day::after { font-size: 8px; margin-top: 1px; }
+
+    .modal { padding: 16px; width: 94%; max-height: 90vh; }
+    .modal h3 { font-size: 17px; }
+    .input-group { margin: 10px 0; }
+    .input-group label { font-size: 11px; margin-bottom: 4px; }
+    .input-group select, .input-group input { font-size: 16px; padding: 9px 10px; }
+    .modal-buttons { flex-wrap: wrap; }
+    .btn-add { width: 38px; height: 38px; font-size: 18px; }
+}
+
+@media (max-width: 380px) {
+    td { min-height: 56px; padding: 4px; }
+    td > div:first-child { font-size: 13px; }
+    .company-label { font-size: 9px; }
+    th { font-size: 10px; }
+}
+
+@media (min-width: 601px) and (max-width: 1024px) {
+    td { height: 100px; }
+    .company-label { font-size: 12px; }
+}
+
+@media (max-width: 900px) and (orientation: landscape) {
+    body { padding: 6px 6px; }
+    .controls { margin-bottom: 6px; }
+    td { min-height: 44px; padding: 3px; }
+    td > div:first-child { font-size: 11px; }
+    .company-label { font-size: 8px; margin-top: 1px; padding: 1px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .busy-label { font-size: 8px; margin-top: 1px; padding: 1px 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .paid-day::after { display: none; }
+    .modal { max-height: 92vh; padding: 14px; }
+    .workdays-list { max-height: 43vh; }
+    .workday-row { min-height: 64px; padding: 10px 11px; }
+    .workday-date { flex-basis: 38px; font-size: 20px; }
+    .workday-company { font-size: 13px; }
+    .workday-time { font-size: 11px; }
+}
+
+/* Evidenzia il giorno corrente */
+td.today {
+    border: 2px solid var(--accent);
+    box-shadow: 0 0 0 2px rgba(79, 70, 229, 0.18), var(--shadow-sm);
+}
+td.today.other-month { opacity: 1; }
+td.today > div:first-child {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 24px;
+    height: 24px;
+    padding: 0 4px;
+    box-sizing: border-box;
+    border-radius: 999px;
+    background: var(--accent);
+    color: #fff;
+}
+</style>
+</head>
+<body>
+
+<div id="syncStatus">🔄 Inizializzazione...</div>
+
+<div class="controls">
+    <select id="monthSelect"></select>
+    <select id="yearSelect"></select>
+    <button class="btn-ui btn-annual" onclick="openSummary('annual')">📊 Annuale</button>
+    <button class="btn-ui btn-monthly" onclick="openSummary('monthly')">📅 Mensile</button>
+    <button class="btn-ui" style="background:#16a34a" onclick="openShareChoice()">📲 Condividi</button>
+    <button class="btn-ui" style="background:#555" onclick="openSettings()">⚙️</button>
+</div>
+
+<div class="calendar-wrap">
+<table id="calendarTable">
+    <thead><tr><th>Lun</th><th>Mar</th><th>Mer</th><th>Gio</th><th>Ven</th><th>Sab</th><th>Dom</th></tr></thead>
+    <tbody id="calendarBody"></tbody>
+</table>
+</div>
+
+<div id="workdaysWrap" class="workdays-wrap">
+    <div class="workdays-header">
+        <span>Giornate lavorate</span>
+        <span id="workdaysCount" class="workdays-count">0 giorni</span>
+    </div>
+    <div id="workdaysList" class="workdays-list"></div>
+</div>
+
+<div id="modalOverlay" class="modal-overlay">
+    <div class="modal">
+        <h3 id="modalDateText" style="margin:0 0 10px 0;"></h3>
+        <button id="pasteBtn" class="btn-paste" onclick="pasteData()" style="display:none; width:100%; margin-bottom:10px;">📋 Incolla Dati</button>
+
+        <div class="input-group">
+            <label class="busy-toggle" for="busyCheck">
+                <input type="checkbox" id="busyCheck">
+                <span>Occupato</span>
+            </label>
+            <input type="text" id="busyNote" placeholder="Note (es. motivo, impegno...)">
+        </div>
+        
+        <div class="input-group">
+            <label>Società</label>
+            <div style="display:flex; gap:5px;">
+                <select id="companySelect" style="flex:1"></select>
+                <button type="button" class="btn-add" onclick="toggleNewRow('company')">+</button>
+            </div>
+            <div id="newCompanyRow" class="new-row" style="display:none;">
+                <input type="text" id="newCompanyInput" placeholder="Nome nuova società..." onkeydown="if(event.key==='Enter'){event.preventDefault();confirmNewOption('company');}">
+                <button type="button" class="btn-save" onclick="confirmNewOption('company')">OK</button>
+                <button type="button" class="btn-cancel" onclick="cancelNewRow('company')">X</button>
+            </div>
+        </div>
+
+        <div class="input-group">
+            <label>Location</label>
+            <div style="display:flex; gap:5px;">
+                <select id="locationSelect" style="flex:1"></select>
+                <button type="button" class="btn-add" onclick="toggleNewRow('location')">+</button>
+            </div>
+            <div id="newLocationRow" class="new-row" style="display:none;">
+                <input type="text" id="newLocationInput" placeholder="Nome nuova location..." onkeydown="if(event.key==='Enter'){event.preventDefault();confirmNewOption('location');}">
+                <button type="button" class="btn-save" onclick="confirmNewOption('location')">OK</button>
+                <button type="button" class="btn-cancel" onclick="cancelNewRow('location')">X</button>
+            </div>
+        </div>
+
+        <div class="input-group"><label>Inizio</label><select id="startTime" onchange="updateModalStats()"></select></div>
+        <div class="input-group"><label>Fine</label><select id="endTime" onchange="updateModalStats()"></select></div>
+        
+        <div class="input-group">
+            <label>Pausa pranzo</label>
+            <select id="lunchBreak" onchange="updateModalStats()">
+                <option value="si">Sì
